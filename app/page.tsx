@@ -250,10 +250,16 @@ export default function Home() {
           
           <div className="text-right">
              <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Status</p>
-             <p className="text-xs font-medium text-emerald-400">{status}</p>
+             <div className="flex flex-col items-end gap-1">
+               <p className="text-xs font-medium text-emerald-400">{status}</p>
+               <p className="text-[8px] font-mono text-slate-600">
+                 REV: {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'LOCAL-DEV'}
+               </p>
+             </div>
           </div>
         </div>
       </div>
+
       
       <p className="mt-8 text-sm text-slate-500 animate-fade-in">
         Open this in another tab to see multiplayer in action.
