@@ -103,7 +103,7 @@ export default function Home() {
         }));
       })
 
-      .subscribe(async (status) => {
+      .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
           setStatus('Online');
           
