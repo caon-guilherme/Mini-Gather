@@ -96,12 +96,13 @@ export default function Home() {
       })
 
 
-      .on('broadcast', { event: 'move' }, ({ payload }) => {
+      .on('broadcast', { event: 'move' }, ({ payload }: { payload: any }) => {
         setPlayers(prev => ({
           ...prev,
           [payload.id]: { x: payload.x, y: payload.y, color: payload.color }
         }));
       })
+
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           setStatus('Online');
