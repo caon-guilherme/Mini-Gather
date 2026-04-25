@@ -27,9 +27,11 @@ export default function Home() {
 
   // Camera & Interaction State
   const [zoom, setZoom] = useState(1);
-  const camera = useRef({ x: 250, y: 250 });
+  const camera = useRef({ x: 0, y: 0 });
   const isDragging = useRef(false);
+  const isFollowing = useRef(true); // Camera follows player by default
   const lastMousePos = useRef({ x: 0, y: 0 });
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
     // 0. Initialize persistent ID
@@ -40,6 +42,14 @@ export default function Home() {
     }
     setId(currentId);
     setMounted(true);
+
+    // Handle Resize
+    const handleResize = () => {
+      setDimensions({ width: window.innerWidth, height: window.innerHeight });
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -64,7 +74,7 @@ export default function Home() {
           if (presences && presences[0]) {
             const p = presences[0];
             if (!playersRef.current[pid]) {
-              playersRef.current[pid] = { x: p.x || 250, y: p.y || 250, targetX: p.x || 250, targetY: p.y || 250, color: p.color };
+              playersRef.current[pid] = { x: p.x || 0, y: p.y || 0, targetX: p.x || 0, targetY: p.y || 0, color: p.color };
             }
           }
         });
@@ -130,17 +140,27 @@ export default function Home() {
       if (keysPressed.current['a'] || keysPressed.current['arrowleft']) { position.current.x -= speed; moved = true; }
       if (keysPressed.current['d'] || keysPressed.current['arrowright']) { position.current.x += speed; moved = true; }
 
-      if (moved && time - lastBroadcast.current > 33) {
-        supabase.channel('room-1').send({
-          type: 'broadcast',
-          event: 'move',
-          payload: { id, x: position.current.x, y: position.current.y, color: myColor.current }
-        });
-        lastBroadcast.current = time;
+      if (moved) {
+        if (time - lastBroadcast.current > 33) {
+          supabase.channel('room-1').send({
+            type: 'broadcast',
+            event: 'move',
+            payload: { id, x: position.current.x, y: position.current.y, color: myColor.current }
+          });
+          lastBroadcast.current = time;
+        }
+        // When moving, follow player
+        isFollowing.current = true;
+      }
+
+      // Smooth camera follow
+      if (isFollowing.current) {
+        camera.current.x += (position.current.x - camera.current.x) * 0.1;
+        camera.current.y += (position.current.y - camera.current.y) * 0.1;
       }
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Apply Camera Transform
@@ -149,9 +169,9 @@ export default function Home() {
       ctx.setTransform(zoom, 0, 0, zoom, offsetX, offsetY);
 
       // Grid (Infinite-ish)
-      ctx.strokeStyle = '#1e293b';
+      ctx.strokeStyle = '#1a1a1a';
       ctx.lineWidth = 1;
-      const gridRange = 2000;
+      const gridRange = 3000;
       for (let x = -gridRange; x <= gridRange; x += 50) {
         ctx.beginPath(); ctx.moveTo(x, -gridRange); ctx.lineTo(x, gridRange); ctx.stroke();
       }
@@ -187,10 +207,11 @@ export default function Home() {
 
     animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [id, zoom]);
+  }, [id, zoom, dimensions]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     isDragging.current = true;
+    isFollowing.current = false; // Stop following on drag
     lastMousePos.current = { x: e.clientX, y: e.clientY };
   };
 
@@ -204,12 +225,12 @@ export default function Home() {
   };
 
   const handleMouseUp = () => { isDragging.current = false; };
-  const centerMap = () => { camera.current = { x: position.current.x, y: position.current.y }; };
+  const centerMap = () => { isFollowing.current = true; };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#070707] font-sans text-white overflow-hidden">
+    <main className="fixed inset-0 flex flex-col items-center justify-center bg-[#070707] font-sans text-white overflow-hidden select-none">
       {/* Game Canvas Container */}
-      <div className="relative w-full h-screen overflow-hidden cursor-grab active:cursor-grabbing"
+      <div className="relative w-full h-full overflow-hidden cursor-grab active:cursor-grabbing"
            onMouseDown={handleMouseDown}
            onMouseMove={handleMouseMove}
            onMouseUp={handleMouseUp}
@@ -217,9 +238,9 @@ export default function Home() {
         
         <canvas 
           ref={canvasRef} 
-          width={typeof window !== 'undefined' ? window.innerWidth : 800} 
-          height={typeof window !== 'undefined' ? window.innerHeight : 600} 
-          className="bg-slate-950"
+          width={dimensions.width} 
+          height={dimensions.height} 
+          className="block"
         />
 
         {/* Floating Controls (Top Right) */}
