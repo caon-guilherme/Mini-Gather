@@ -71,7 +71,7 @@ export default function Home() {
           return next;
         });
       })
-      .on('presence', { event: 'join', key: id }, ({ newPresences }) => {
+      .on('presence', { event: 'join', key: id }, ({ newPresences }: { newPresences: any[] }) => {
         // When someone joins, send them our current position immediately
         // so they don't have to wait for us to move
         if (newPresences.length > 0) {
@@ -82,7 +82,7 @@ export default function Home() {
           });
         }
       })
-      .on('presence', { event: 'leave', key: id }, ({ leftPresences }) => {
+      .on('presence', { event: 'leave', key: id }, ({ leftPresences }: { leftPresences: any[] }) => {
         setPlayers(prev => {
           const next = { ...prev };
           leftPresences.forEach((p: any) => {
@@ -91,6 +91,7 @@ export default function Home() {
           return next;
         });
       })
+
 
       .on('broadcast', { event: 'move' }, ({ payload }) => {
         setPlayers(prev => ({
