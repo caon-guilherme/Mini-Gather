@@ -37,16 +37,15 @@ export default function Home() {
 
 
 
-  const keysPressed = useRef<Record<string, boolean>>({});
-  const lastBroadcast = useRef(0);
+  const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string }>>({});
+  const [playerCount, setPlayerCount] = useState(0);
 
   useEffect(() => {
     if (!mounted || id === '...') return;
 
-    // 1. Setup Supabase Channel
     const channel = supabase.channel('room-1', {
       config: {
-        broadcast: { self: false }, // Don't receive our own moves back
+        broadcast: { self: false },
         presence: { key: id },
       },
     });
@@ -54,70 +53,41 @@ export default function Home() {
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        setPlayers(prev => {
-          const next = { ...prev };
-          const presentIds = Object.keys(state);
-          
-          presentIds.forEach(pid => {
-            const presences = state[pid] as any[];
-            if (presences && presences[0]) {
-              const p = presences[0];
-              if (!next[pid]) {
-                next[pid] = { x: p.x || 250, y: p.y || 250, targetX: p.x || 250, targetY: p.y || 250, color: p.color };
-              }
+        const presentIds = Object.keys(state);
+        setPlayerCount(presentIds.length);
+        
+        presentIds.forEach(pid => {
+          if (pid === id) return; // Skip self, we handle local separately
+          const presences = state[pid] as any[];
+          if (presences && presences[0]) {
+            const p = presences[0];
+            if (!playersRef.current[pid]) {
+              playersRef.current[pid] = { x: p.x || 250, y: p.y || 250, targetX: p.x || 250, targetY: p.y || 250, color: p.color };
             }
-          });
-
-          Object.keys(next).forEach(pid => {
-            if (!presentIds.includes(pid)) delete next[pid];
-          });
-          return next;
+          }
         });
-      })
-      .on('presence', { event: 'join', key: id }, ({ newPresences }: { newPresences: any[] }) => {
-        if (newPresences.length > 0) {
-          channel.send({
-            type: 'broadcast',
-            event: 'move',
-            payload: { id, x: position.current.x, y: position.current.y, color: myColor.current }
-          });
-        }
-      })
-      .on('presence', { event: 'leave', key: id }, ({ leftPresences }: { leftPresences: any[] }) => {
-        setPlayers(prev => {
-          const next = { ...prev };
-          leftPresences.forEach((p: any) => {
-            delete next[p.presence_ref];
-          });
-          return next;
+
+        // Cleanup left players
+        Object.keys(playersRef.current).forEach(pid => {
+          if (pid !== id && !presentIds.includes(pid)) delete playersRef.current[pid];
         });
       })
       .on('broadcast', { event: 'move' }, ({ payload }: { payload: any }) => {
-        setPlayers(prev => ({
-          ...prev,
-          [payload.id]: { 
-            ...(prev[payload.id] || { x: payload.x, y: payload.y, color: payload.color }),
-            targetX: payload.x, 
-            targetY: payload.y 
-          }
-        }));
+        if (!playersRef.current[payload.id]) {
+          playersRef.current[payload.id] = { x: payload.x, y: payload.y, targetX: payload.x, targetY: payload.y, color: payload.color };
+        } else {
+          playersRef.current[payload.id].targetX = payload.x;
+          playersRef.current[payload.id].targetY = payload.y;
+        }
       })
       .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
           setStatus('Online');
-          await channel.track({
-            id,
-            x: position.current.x,
-            y: position.current.y,
-            color: myColor.current,
-            online_at: new Date().toISOString(),
-          });
+          await channel.track({ id, x: position.current.x, y: position.current.y, color: myColor.current });
         }
       });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [id, mounted]);
 
   useEffect(() => {
@@ -143,7 +113,6 @@ export default function Home() {
     let animationFrameId: number;
 
     const render = (time: number) => {
-      // 1. Update Local Position (60 FPS fluid)
       const speed = 4;
       let moved = false;
       if (keysPressed.current['w'] || keysPressed.current['arrowup']) { position.current.y -= speed; moved = true; }
@@ -151,7 +120,6 @@ export default function Home() {
       if (keysPressed.current['a'] || keysPressed.current['arrowleft']) { position.current.x -= speed; moved = true; }
       if (keysPressed.current['d'] || keysPressed.current['arrowright']) { position.current.x += speed; moved = true; }
 
-      // 2. Broadcast position (throttled to ~30Hz for performance)
       if (moved && time - lastBroadcast.current > 33) {
         supabase.channel('room-1').send({
           type: 'broadcast',
@@ -161,11 +129,10 @@ export default function Home() {
         lastBroadcast.current = time;
       }
 
-      // 3. Clear Canvas
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw Grid
+      // Grid
       ctx.strokeStyle = '#1e293b';
       ctx.lineWidth = 1;
       for (let x = 0; x <= canvas.width; x += 50) {
@@ -175,36 +142,29 @@ export default function Home() {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       }
 
-      // 4. Update & Draw Players
-      setPlayers(prev => {
-        const next = { ...prev };
-        Object.keys(next).forEach(pid => {
-          const p = next[pid];
-          // Interpolation for remote players
-          if (pid !== id) {
-            p.x += (p.targetX - p.x) * 0.15; // Smooth slide
-            p.y += (p.targetY - p.y) * 0.15;
-          } else {
-            // My own position is updated by inputs
-            p.x = position.current.x;
-            p.y = position.current.y;
-          }
+      // Draw Me
+      const drawPlayer = (x: number, y: number, color: string, label: string) => {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = color;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x - 15, y - 15, 30, 30, 8);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, x, y - 25);
+      };
 
-          // Render
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = p.color;
-          ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.roundRect(p.x - 15, p.y - 15, 30, 30, 8);
-          ctx.fill();
-          ctx.shadowBlur = 0;
+      drawPlayer(position.current.x, position.current.y, myColor.current, 'You');
 
-          ctx.fillStyle = 'white';
-          ctx.font = '12px Inter, system-ui, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(pid === id ? 'You' : `Player ${pid.slice(0, 4)}`, p.x, p.y - 25);
-        });
-        return next;
+      // Draw Others with interpolation
+      Object.entries(playersRef.current).forEach(([pid, p]) => {
+        if (pid === id) return;
+        p.x += (p.targetX - p.x) * 0.15;
+        p.y += (p.targetY - p.y) * 0.15;
+        drawPlayer(p.x, p.y, p.color, `Player ${pid.slice(0, 4)}`);
       });
 
       animationFrameId = requestAnimationFrame(render);
@@ -213,6 +173,7 @@ export default function Home() {
     animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
   }, [id]);
+
 
 
   return (
@@ -226,7 +187,7 @@ export default function Home() {
           <div className="flex items-center gap-4 text-[10px] font-medium text-slate-400 uppercase tracking-widest">
             <span>ID: {mounted ? id.slice(0, 6) : '......'}</span>
             <span className="h-3 w-[1px] bg-slate-800" />
-            <span>Players: {Object.keys(players).length}</span>
+            <span>Players: {playerCount}</span>
           </div>
 
         </div>
