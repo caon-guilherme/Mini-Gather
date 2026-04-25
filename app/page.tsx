@@ -197,7 +197,7 @@ export default function Home() {
       },
     });
 
-    channel
+    (channel as any)
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const presentIds = Object.keys(state);
@@ -241,6 +241,7 @@ export default function Home() {
           await channel.track({ id, x: position.current.x, y: position.current.y, color: myColor.current });
         }
       });
+
 
     return () => { supabase.removeChannel(channel); };
   }, [id, mounted]);
