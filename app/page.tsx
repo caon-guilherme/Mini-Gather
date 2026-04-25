@@ -37,13 +37,16 @@ export default function Home() {
 
 
 
+  const keysPressed = useRef<Record<string, boolean>>({});
+  const lastBroadcast = useRef(0);
+
   useEffect(() => {
     if (!mounted || id === '...') return;
 
     // 1. Setup Supabase Channel
     const channel = supabase.channel('room-1', {
       config: {
-        broadcast: { self: true },
+        broadcast: { self: false }, // Don't receive our own moves back
         presence: { key: id },
       },
     });
@@ -55,19 +58,16 @@ export default function Home() {
           const next = { ...prev };
           const presentIds = Object.keys(state);
           
-          // Add/Update players from presence state
           presentIds.forEach(pid => {
             const presences = state[pid] as any[];
             if (presences && presences[0]) {
               const p = presences[0];
-              // Only update if we don't have them or if they are new
               if (!next[pid]) {
-                next[pid] = { x: p.x || 250, y: p.y || 250, color: p.color };
+                next[pid] = { x: p.x || 250, y: p.y || 250, targetX: p.x || 250, targetY: p.y || 250, color: p.color };
               }
             }
           });
 
-          // Remove players who are no longer present
           Object.keys(next).forEach(pid => {
             if (!presentIds.includes(pid)) delete next[pid];
           });
@@ -75,13 +75,11 @@ export default function Home() {
         });
       })
       .on('presence', { event: 'join', key: id }, ({ newPresences }: { newPresences: any[] }) => {
-        // When someone joins, send them our current position immediately
-        // so they don't have to wait for us to move
         if (newPresences.length > 0) {
           channel.send({
             type: 'broadcast',
             event: 'move',
-            payload: { id, ...position.current, color: myColor.current }
+            payload: { id, x: position.current.x, y: position.current.y, color: myColor.current }
           });
         }
       })
@@ -94,20 +92,19 @@ export default function Home() {
           return next;
         });
       })
-
-
       .on('broadcast', { event: 'move' }, ({ payload }: { payload: any }) => {
         setPlayers(prev => ({
           ...prev,
-          [payload.id]: { x: payload.x, y: payload.y, color: payload.color }
+          [payload.id]: { 
+            ...(prev[payload.id] || { x: payload.x, y: payload.y, color: payload.color }),
+            targetX: payload.x, 
+            targetY: payload.y 
+          }
         }));
       })
-
       .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
           setStatus('Online');
-          
-          // Track our presence with initial position
           await channel.track({
             id,
             x: position.current.x,
@@ -115,49 +112,24 @@ export default function Home() {
             color: myColor.current,
             online_at: new Date().toISOString(),
           });
-
-
-          // Initial broadcast
-          channel.send({
-            type: 'broadcast',
-            event: 'move',
-            payload: { id, ...position.current, color: myColor.current }
-          });
-        } else if (status === 'CHANNEL_ERROR') {
-          setStatus('Offline (Check Env)');
         }
       });
-
-
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id]);
+  }, [id, mounted]);
 
   useEffect(() => {
     if (id === '...') return;
-
-    const handleKey = (e: KeyboardEvent) => {
-      const step = 10;
-      let moved = false;
-      
-      if (e.key === 'ArrowUp' || e.key === 'w') { position.current.y -= step; moved = true; }
-      if (e.key === 'ArrowDown' || e.key === 's') { position.current.y += step; moved = true; }
-      if (e.key === 'ArrowLeft' || e.key === 'a') { position.current.x -= step; moved = true; }
-      if (e.key === 'ArrowRight' || e.key === 'd') { position.current.x += step; moved = true; }
-
-      if (moved) {
-        supabase.channel('room-1').send({
-          type: 'broadcast',
-          event: 'move',
-          payload: { id, ...position.current, color: myColor.current }
-        });
-      }
+    const handleDown = (e: KeyboardEvent) => { keysPressed.current[e.key.toLowerCase()] = true; };
+    const handleUp = (e: KeyboardEvent) => { keysPressed.current[e.key.toLowerCase()] = false; };
+    window.addEventListener('keydown', handleDown);
+    window.addEventListener('keyup', handleUp);
+    return () => {
+      window.removeEventListener('keydown', handleDown);
+      window.removeEventListener('keyup', handleUp);
     };
-
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
   }, [id]);
 
   useEffect(() => {
@@ -170,58 +142,78 @@ export default function Home() {
 
     let animationFrameId: number;
 
-    const render = () => {
-      // Clear with a nice background
-      ctx.fillStyle = '#0f172a'; // slate-900
+    const render = (time: number) => {
+      // 1. Update Local Position (60 FPS fluid)
+      const speed = 4;
+      let moved = false;
+      if (keysPressed.current['w'] || keysPressed.current['arrowup']) { position.current.y -= speed; moved = true; }
+      if (keysPressed.current['s'] || keysPressed.current['arrowdown']) { position.current.y += speed; moved = true; }
+      if (keysPressed.current['a'] || keysPressed.current['arrowleft']) { position.current.x -= speed; moved = true; }
+      if (keysPressed.current['d'] || keysPressed.current['arrowright']) { position.current.x += speed; moved = true; }
+
+      // 2. Broadcast position (throttled to ~30Hz for performance)
+      if (moved && time - lastBroadcast.current > 33) {
+        supabase.channel('room-1').send({
+          type: 'broadcast',
+          event: 'move',
+          payload: { id, x: position.current.x, y: position.current.y, color: myColor.current }
+        });
+        lastBroadcast.current = time;
+      }
+
+      // 3. Clear Canvas
+      ctx.fillStyle = '#0f172a';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw Grid
-      ctx.strokeStyle = '#1e293b'; // slate-800
+      ctx.strokeStyle = '#1e293b';
       ctx.lineWidth = 1;
-      const gridSize = 50;
-      for (let x = 0; x <= canvas.width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
+      for (let x = 0; x <= canvas.width; x += 50) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       }
-      for (let y = 0; y <= canvas.height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
+      for (let y = 0; y <= canvas.height; y += 50) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       }
 
-      // Draw Players
-      Object.entries(players).forEach(([pid, p]) => {
-        const isMe = pid === id;
-        
-        // Shadow/Glow
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = p.color;
-        
-        // Body
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.roundRect(p.x - 15, p.y - 15, 30, 30, 8);
-        ctx.fill();
-        
-        // Reset shadow
-        ctx.shadowBlur = 0;
+      // 4. Update & Draw Players
+      setPlayers(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(pid => {
+          const p = next[pid];
+          // Interpolation for remote players
+          if (pid !== id) {
+            p.x += (p.targetX - p.x) * 0.15; // Smooth slide
+            p.y += (p.targetY - p.y) * 0.15;
+          } else {
+            // My own position is updated by inputs
+            p.x = position.current.x;
+            p.y = position.current.y;
+          }
 
-        // Label
-        ctx.fillStyle = 'white';
-        ctx.font = '12px Inter, system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(isMe ? 'You' : `Player ${pid.slice(0, 4)}`, p.x, p.y - 25);
+          // Render
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = p.color;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.roundRect(p.x - 15, p.y - 15, 30, 30, 8);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          ctx.fillStyle = 'white';
+          ctx.font = '12px Inter, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(pid === id ? 'You' : `Player ${pid.slice(0, 4)}`, p.x, p.y - 25);
+        });
+        return next;
       });
 
       animationFrameId = requestAnimationFrame(render);
     };
 
-    render();
+    animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [players, id]);
+  }, [id]);
+
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-4 font-sans text-white">
