@@ -17,6 +17,7 @@ const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID || '6439685d9c304b118e
  */
 
 export default function Home() {
+  console.log('Componente montado. AGORA_APP_ID:', AGORA_APP_ID);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [playerCount, setPlayerCount] = useState(0);
   const [id, setId] = useState('...');
@@ -70,11 +71,14 @@ export default function Home() {
       console.log("Iniciando Agora com ID:", AGORA_APP_ID);
       try {
         const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
+        console.log("Agora SDK importado.");
         AgoraRTC.setLogLevel(2); // Avisos e Erros
         AgoraRTC.enableAudioVolumeIndicator();
+        console.log("Volume indicator ativado.");
         
         const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
         agoraClient.current = client;
+        console.log("Cliente criado.");
 
         client.on('user-published', async (user: any, mediaType: any) => {
           console.log("Usuário remoto publicou áudio:", user.uid);
