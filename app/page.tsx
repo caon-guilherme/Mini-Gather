@@ -18,12 +18,17 @@ export default function Home() {
   const [id, setId] = useState('...');
   const [status, setStatus] = useState('Connecting...');
   const [mounted, setMounted] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(false);
   
   const position = useRef({ x: 250, y: 250 });
   const myColor = useRef(`hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`);
   const keysPressed = useRef<Record<string, boolean>>({});
   const lastBroadcast = useRef(0);
-  const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string }>>({});
+  const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string; audioTrack?: any }>>({});
+
+  // Agora Refs
+  const agoraClient = useRef<any>(null);
+  const localAudioTrack = useRef<any>(null);
 
   // Camera & Interaction State
   const [zoom, setZoom] = useState(1);
@@ -50,6 +55,91 @@ export default function Home() {
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Agora Initialization
+  useEffect(() => {
+    if (!mounted || !AGORA_APP_ID) return;
+
+    const initAgora = async () => {
+      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+      const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      agoraClient.current = client;
+
+      client.on('user-published', async (user, mediaType) => {
+        await client.subscribe(user, mediaType);
+        if (mediaType === 'audio') {
+          const remoteAudioTrack = user.audioTrack;
+          if (remoteAudioTrack) {
+            remoteAudioTrack.play();
+            if (playersRef.current[user.uid as string]) {
+              playersRef.current[user.uid as string].audioTrack = remoteAudioTrack;
+            }
+          }
+        }
+      });
+
+      client.on('user-unpublished', (user) => {
+        if (playersRef.current[user.uid as string]) {
+          playersRef.current[user.uid as string].audioTrack = null;
+        }
+      });
+
+      try {
+        await client.join(AGORA_APP_ID, 'main-room', null, id);
+      } catch (e) {
+        console.error('Agora Join Error', e);
+      }
+    };
+
+    initAgora();
+    return () => {
+      if (agoraClient.current) {
+        agoraClient.current.leave();
+      }
+    };
+  }, [id, mounted]);
+
+  // Mic Toggle
+  const toggleMic = async () => {
+    if (!agoraClient.current || !AGORA_APP_ID) return;
+    
+    if (isMicOn) {
+      if (localAudioTrack.current) {
+        await agoraClient.current.unpublish(localAudioTrack.current);
+        localAudioTrack.current.close();
+        localAudioTrack.current = null;
+      }
+      setIsMicOn(false);
+    } else {
+      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+      try {
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        localAudioTrack.current = audioTrack;
+        await agoraClient.current.publish(audioTrack);
+        setIsMicOn(true);
+      } catch (e) {
+        console.error('Mic Error', e);
+      }
+    }
+  };
+
+  // Distance / Volume Logic
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Object.entries(playersRef.current).forEach(([pid, player]) => {
+        if (player.audioTrack) {
+          const dx = position.current.x - player.x;
+          const dy = position.current.y - player.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          // Max distance for audio: 400px
+          let volume = Math.max(0, 100 - (dist / 4)); 
+          player.audioTrack.setVolume(Math.floor(volume));
+        }
+      });
+    }, 200);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -280,10 +370,10 @@ export default function Home() {
           {/* User Profile Info */}
           <div className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 rounded-xl cursor-pointer transition-all border-r border-white/5 mr-1">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold shadow-lg">
-              {id.slice(0, 1).toUpperCase()}
+              {mounted ? id.slice(0, 1).toUpperCase() : '?'}
             </div>
             <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-white/90 leading-none">User</span>
+              <span className="text-[11px] font-bold text-white/90 leading-none">Player {mounted ? id.slice(0, 4) : '...'}</span>
               <span className="text-[9px] text-emerald-400 font-medium">Disponível</span>
             </div>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
@@ -291,7 +381,11 @@ export default function Home() {
 
           {/* Interactive Buttons (Mocked) */}
           <div className="flex items-center gap-1">
-            <ToolbarButton active icon={<><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>} />
+            <ToolbarButton 
+              active={isMicOn} 
+              onClick={toggleMic}
+              icon={<><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>} 
+            />
             <ToolbarButton active icon={<><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>} />
             <ToolbarButton icon={<><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>} />
             <ToolbarButton icon={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></>} />
@@ -332,9 +426,11 @@ export default function Home() {
   );
 }
 
-function ToolbarButton({ icon, active = false, dot = false }: { icon: React.ReactNode, active?: boolean, dot?: boolean }) {
+function ToolbarButton({ icon, active = false, dot = false, onClick }: { icon: React.ReactNode, active?: boolean, dot?: boolean, onClick?: () => void }) {
   return (
-    <button className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all ${active ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
+    <button 
+      onClick={onClick}
+      className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all ${active ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         {icon}
       </svg>
