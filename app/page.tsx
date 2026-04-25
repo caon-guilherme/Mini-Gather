@@ -23,12 +23,13 @@ export default function Home() {
   const [status, setStatus] = useState('Connecting...');
   const [mounted, setMounted] = useState(false);
   const [isMicOn, setIsMicOn] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   
   const position = useRef({ x: 250, y: 250 });
   const myColor = useRef(`hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`);
   const keysPressed = useRef<Record<string, boolean>>({});
   const lastBroadcast = useRef(0);
-  const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string; audioTrack?: any }>>({});
+  const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string; audioTrack?: any; isSpeaking?: boolean }>>({});
 
   // Agora Refs
   const agoraClient = useRef<any>(null);
@@ -67,6 +68,8 @@ export default function Home() {
 
     const initAgora = async () => {
       const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+      AgoraRTC.enableAudioVolumeIndicator(); // Detecção de voz
+      
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
       agoraClient.current = client;
 
@@ -89,12 +92,25 @@ export default function Home() {
         }
       });
 
+      // Balãozinho de fala
+      client.on('volume-indicator', (volumes) => {
+        volumes.forEach((volume) => {
+          const isUserSpeaking = volume.level > 10;
+          if (volume.uid === id) {
+            setIsSpeaking(isUserSpeaking);
+          } else if (playersRef.current[volume.uid as string]) {
+            playersRef.current[volume.uid as string].isSpeaking = isUserSpeaking;
+          }
+        });
+      });
+
       try {
         await client.join(AGORA_APP_ID, 'main-room', null, id);
       } catch (e) {
         console.error('Agora Join Error', e);
       }
     };
+
 
     initAgora();
     return () => {
@@ -115,6 +131,7 @@ export default function Home() {
         localAudioTrack.current = null;
       }
       setIsMicOn(false);
+      setIsSpeaking(false);
     } else {
       const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
       try {
@@ -274,37 +291,46 @@ export default function Home() {
         ctx.beginPath(); ctx.moveTo(-gridRange, y); ctx.lineTo(gridRange, y); ctx.stroke();
       }
 
-      const drawPlayer = (x: number, y: number, color: string, label: string) => {
+      const drawPlayer = (x: number, y: number, color: string, label: string, speaking: boolean = false) => {
         const px = Math.floor(x);
         const py = Math.floor(y);
         
-        // Draw blocky character (3x3 pixels)
+        // Draw blocky character
         ctx.fillStyle = color;
-        // Body
         ctx.fillRect(px - 12, py - 12, 24, 24);
-        // Face/Eyes area
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.fillRect(px - 8, py - 4, 16, 4);
-        // Eyes
         ctx.fillStyle = 'white';
         ctx.fillRect(px - 6, py - 4, 2, 2);
         ctx.fillRect(px + 4, py - 4, 2, 2);
         
-        // Label with pixel feel
+        // Speech Bubble (Visual indicator)
+        if (speaking) {
+          ctx.fillStyle = 'white';
+          ctx.beginPath();
+          ctx.arc(px + 15, py - 20, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#1a1c2c';
+          ctx.font = '10px Arial';
+          ctx.fillText('♪', px + 15, py - 16);
+        }
+
+        // Label
         ctx.fillStyle = 'white';
         ctx.font = `bold ${10 / zoom}px "Courier New", monospace`;
         ctx.textAlign = 'center';
         ctx.fillText(label.toUpperCase(), px, py - 22);
       };
 
-      drawPlayer(position.current.x, position.current.y, myColor.current, 'You');
+      drawPlayer(position.current.x, position.current.y, myColor.current, 'You', isSpeaking);
 
       Object.entries(playersRef.current).forEach(([pid, p]) => {
         if (pid === id) return;
         p.x += (p.targetX - p.x) * 0.15;
         p.y += (p.targetY - p.y) * 0.15;
-        drawPlayer(p.x, p.y, p.color, `Player ${pid.slice(0, 4)}`);
+        drawPlayer(p.x, p.y, p.color, `Player ${pid.slice(0, 4)}`, p.isSpeaking);
       });
+
 
 
       animationFrameId = requestAnimationFrame(render);
@@ -385,11 +411,14 @@ export default function Home() {
 
           {/* Interactive Buttons (Mocked) */}
           <div className="flex items-center gap-1">
-            <ToolbarButton 
-              active={isMicOn} 
+            <button 
               onClick={toggleMic}
-              icon={<><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>} 
-            />
+              className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all ${isMicOn ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+                {!isMicOn && <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" />}
+              </svg>
+            </button>
             <ToolbarButton active icon={<><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>} />
             <ToolbarButton icon={<><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>} />
             <ToolbarButton icon={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></>} />
