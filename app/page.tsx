@@ -3,6 +3,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import type IAgoraRTC from 'agora-rtc-sdk-ng';
+
+// Configuração da Agora.io (O ID deve ser configurado no painel da Vercel)
+const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID || '';
 
 /**
  * Mini Gather - Multiplayer Basic Demo
