@@ -133,13 +133,45 @@ export default function Home() {
   // Mic Toggle
   const toggleMic = async () => {
     if (!AGORA_APP_ID) {
-      alert("Configuração Necessária: Por favor, adicione o seu NEXT_PUBLIC_AGORA_APP_ID nas variáveis de ambiente da Vercel.");
+      alert("NEXT_PUBLIC_AGORA_APP_ID não configurado.");
       return;
     }
-    
+
+    // Se o cliente ainda não estiver pronto, inicializa agora
     if (!agoraClient.current) {
-      alert("O sistema de áudio ainda está carregando ou falhou ao iniciar. Verifique se o ID está correto.");
-      return;
+      try {
+        console.log("Inicializando Agora no clique do mic...");
+        const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
+        const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+        agoraClient.current = client;
+
+        client.on('user-published', async (user: any, mediaType: any) => {
+          await client.subscribe(user, mediaType);
+          if (mediaType === 'audio') {
+            user.audioTrack?.play();
+            if (playersRef.current[user.uid]) {
+              playersRef.current[user.uid].audioTrack = user.audioTrack;
+            }
+          }
+        });
+
+        client.on('volume-indicator', (volumes: any[]) => {
+          volumes.forEach((v: any) => {
+            const speaking = v.level > 10;
+            if (v.uid === id) setIsSpeaking(speaking);
+            else if (playersRef.current[v.uid]) playersRef.current[v.uid].isSpeaking = speaking;
+          });
+        });
+
+        AgoraRTC.enableAudioVolumeIndicator();
+        const currentId = sessionStorage.getItem('mini-gather-id') || id;
+        await client.join(AGORA_APP_ID, 'main-room', null, currentId);
+        console.log("Agora conectado via clique do mic!");
+      } catch (e) {
+        console.error("Falha ao inicializar Agora no clique:", e);
+        alert("Não foi possível conectar ao servidor de áudio. Verifique o console (F12).");
+        return;
+      }
     }
     
     if (isMicOn) {
