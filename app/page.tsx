@@ -123,13 +123,25 @@ export default function Home() {
 
   // Mic Toggle
   const toggleMic = async () => {
-    if (!agoraClient.current || !AGORA_APP_ID) return;
+    if (!AGORA_APP_ID) {
+      alert("Configuração Necessária: Por favor, adicione o seu NEXT_PUBLIC_AGORA_APP_ID nas variáveis de ambiente da Vercel.");
+      return;
+    }
+    
+    if (!agoraClient.current) {
+      alert("O sistema de áudio ainda está carregando ou falhou ao iniciar. Verifique se o ID está correto.");
+      return;
+    }
     
     if (isMicOn) {
       if (localAudioTrack.current) {
-        await agoraClient.current.unpublish(localAudioTrack.current);
-        localAudioTrack.current.close();
-        localAudioTrack.current = null;
+        try {
+          await agoraClient.current.unpublish(localAudioTrack.current);
+          localAudioTrack.current.close();
+          localAudioTrack.current = null;
+        } catch (e) {
+          console.error("Erro ao desativar mic:", e);
+        }
       }
       setIsMicOn(false);
       setIsSpeaking(false);
@@ -141,10 +153,12 @@ export default function Home() {
         await agoraClient.current.publish(audioTrack);
         setIsMicOn(true);
       } catch (e) {
-        console.error('Mic Error', e);
+        alert("Erro ao acessar microfone. Verifique as permissões do navegador.");
+        console.error('Mic Error:', e);
       }
     }
   };
+
 
   // Distance / Volume Logic
   useEffect(() => {
