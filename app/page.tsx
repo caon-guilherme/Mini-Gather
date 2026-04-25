@@ -73,7 +73,7 @@ export default function Home() {
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
       agoraClient.current = client;
 
-      client.on('user-published', async (user, mediaType) => {
+      client.on('user-published', async (user: any, mediaType: any) => {
         await client.subscribe(user, mediaType);
         if (mediaType === 'audio') {
           const remoteAudioTrack = user.audioTrack;
@@ -86,15 +86,15 @@ export default function Home() {
         }
       });
 
-      client.on('user-unpublished', (user) => {
+      client.on('user-unpublished', (user: any) => {
         if (playersRef.current[user.uid as string]) {
           playersRef.current[user.uid as string].audioTrack = null;
         }
       });
 
       // Balãozinho de fala
-      client.on('volume-indicator', (volumes) => {
-        volumes.forEach((volume) => {
+      client.on('volume-indicator', (volumes: any[]) => {
+        volumes.forEach((volume: any) => {
           const isUserSpeaking = volume.level > 10;
           if (volume.uid === id) {
             setIsSpeaking(isUserSpeaking);
@@ -103,6 +103,7 @@ export default function Home() {
           }
         });
       });
+
 
       try {
         await client.join(AGORA_APP_ID, 'main-room', null, id);
