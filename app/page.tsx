@@ -1,4 +1,6 @@
 'use client';
+// Force Vercel rebuild - 2024-04-24 22:07
+
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
