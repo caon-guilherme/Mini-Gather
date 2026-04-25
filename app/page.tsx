@@ -27,7 +27,7 @@ export default function Home() {
 
   // Camera & Interaction State
   const [zoom, setZoom] = useState(1);
-  const camera = useRef({ x: 0, y: 0 });
+  const camera = useRef({ x: 250, y: 250 });
   const isDragging = useRef(false);
   const isFollowing = useRef(true); // Camera follows player by default
   const lastMousePos = useRef({ x: 0, y: 0 });
