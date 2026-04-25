@@ -65,7 +65,7 @@ export default function Home() {
 
   // Agora Initialization
   useEffect(() => {
-    if (!mounted || !AGORA_APP_ID) return;
+    if (!mounted || !AGORA_APP_ID || !id || id === '...') return;
 
     const initAgora = async () => {
       console.log("Iniciando Agora com ID:", AGORA_APP_ID);
