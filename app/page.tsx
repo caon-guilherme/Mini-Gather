@@ -67,7 +67,7 @@ export default function Home() {
     if (!mounted || !AGORA_APP_ID) return;
 
     const initAgora = async () => {
-      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
       AgoraRTC.enableAudioVolumeIndicator(); // Detecção de voz
       
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
@@ -133,7 +133,7 @@ export default function Home() {
       setIsMicOn(false);
       setIsSpeaking(false);
     } else {
-      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
       try {
         const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
         localAudioTrack.current = audioTrack;
