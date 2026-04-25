@@ -68,6 +68,16 @@ export default function Home() {
           if (pid !== id && !presentIds.includes(pid)) delete playersRef.current[pid];
         });
       })
+      .on('presence', { event: 'join', key: id }, ({ newPresences }: { newPresences: any[] }) => {
+        // Quando alguém novo entra, todos os jogadores atuais enviam sua posição real
+        if (newPresences.length > 0 && newPresences[0].id !== id) {
+          channel.send({
+            type: 'broadcast',
+            event: 'move',
+            payload: { id, x: position.current.x, y: position.current.y, color: myColor.current }
+          });
+        }
+      })
       .on('broadcast', { event: 'move' }, ({ payload }: { payload: any }) => {
         if (!playersRef.current[payload.id]) {
           playersRef.current[payload.id] = { x: payload.x, y: payload.y, targetX: payload.x, targetY: payload.y, color: payload.color };
