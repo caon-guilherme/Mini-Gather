@@ -422,6 +422,28 @@ export default function Home() {
     });
   };
 
+  // Touch Events for mobile pan
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      isDragging.current = true;
+      isFollowing.current = false;
+      lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging.current || e.touches.length !== 1) return;
+    const dx = (e.touches[0].clientX - lastMousePos.current.x) / zoom;
+    const dy = (e.touches[0].clientY - lastMousePos.current.y) / zoom;
+    camera.current.x -= dx;
+    camera.current.y -= dy;
+    lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const handleTouchEnd = () => { isDragging.current = false; };
+
+  // Virtual D-Pad for mobile movement
+  const dpadPress = (dir: string) => { keysPressed.current[dir] = true; isFollowing.current = true; };
+  const dpadRelease = (dir: string) => { keysPressed.current[dir] = false; };
+
   return (
     <main className="fixed inset-0 flex flex-col items-center justify-center bg-[#070707] font-sans text-white overflow-hidden select-none">
       {/* Game Canvas Container */}
@@ -430,7 +452,10 @@ export default function Home() {
            onMouseMove={handleMouseMove}
            onMouseUp={handleMouseUp}
            onMouseLeave={handleMouseUp}
-           onWheel={handleWheel}>
+           onWheel={handleWheel}
+           onTouchStart={handleTouchStart}
+           onTouchMove={handleTouchMove}
+           onTouchEnd={handleTouchEnd}>
 
         
         <canvas 
@@ -441,48 +466,77 @@ export default function Home() {
         />
 
         {/* Floating Controls (Bottom Right) */}
-        <div className="absolute bottom-24 right-6 flex flex-col gap-2 pointer-events-auto">
-          <button onClick={centerMap} className="p-3 bg-[#202124] hover:bg-[#3c4043] rounded-xl border border-white/10 shadow-2xl transition-all">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>
+        <div className="absolute bottom-24 right-3 sm:right-6 flex flex-col gap-2 pointer-events-auto">
+          <button onClick={centerMap} className="p-2.5 sm:p-3 bg-[#202124] hover:bg-[#3c4043] rounded-xl border border-white/10 shadow-2xl transition-all">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>
           </button>
           <div className="flex flex-col rounded-xl border border-white/10 bg-[#202124] shadow-2xl overflow-hidden">
-            <button onClick={() => setZoom(prev => Math.min(prev + 0.1, 2))} className="p-3 hover:bg-[#3c4043] border-b border-white/5 transition-all text-xl font-light">+</button>
-            <button onClick={() => setZoom(prev => Math.max(prev - 0.1, 0.5))} className="p-3 hover:bg-[#3c4043] transition-all text-xl font-light">−</button>
+            <button onClick={() => setZoom(prev => Math.min(prev + 0.1, 2))} className="p-2.5 sm:p-3 hover:bg-[#3c4043] border-b border-white/5 transition-all text-lg font-light">+</button>
+            <button onClick={() => setZoom(prev => Math.max(prev - 0.1, 0.5))} className="p-2.5 sm:p-3 hover:bg-[#3c4043] transition-all text-lg font-light">−</button>
+          </div>
+        </div>
+
+        {/* Mobile D-Pad */}
+        <div className="absolute bottom-24 left-3 pointer-events-auto flex flex-col items-center gap-1 sm:hidden">
+          <button
+            onTouchStart={(e) => { e.stopPropagation(); dpadPress('arrowup'); }}
+            onTouchEnd={() => dpadRelease('arrowup')}
+            className="w-12 h-12 bg-[#202124]/90 border border-white/10 rounded-xl flex items-center justify-center active:bg-white/20">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <div className="flex gap-1">
+            <button
+              onTouchStart={(e) => { e.stopPropagation(); dpadPress('arrowleft'); }}
+              onTouchEnd={() => dpadRelease('arrowleft')}
+              className="w-12 h-12 bg-[#202124]/90 border border-white/10 rounded-xl flex items-center justify-center active:bg-white/20">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button
+              onTouchStart={(e) => { e.stopPropagation(); dpadPress('arrowdown'); }}
+              onTouchEnd={() => dpadRelease('arrowdown')}
+              className="w-12 h-12 bg-[#202124]/90 border border-white/10 rounded-xl flex items-center justify-center active:bg-white/20">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <button
+              onTouchStart={(e) => { e.stopPropagation(); dpadPress('arrowright'); }}
+              onTouchEnd={() => dpadRelease('arrowright')}
+              className="w-12 h-12 bg-[#202124]/90 border border-white/10 rounded-xl flex items-center justify-center active:bg-white/20">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
           </div>
         </div>
 
         {/* Gather.town Style Bottom Toolbar */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 rounded-2xl bg-[#202124]/95 border border-white/10 shadow-2xl backdrop-blur-xl pointer-events-auto">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 rounded-2xl bg-[#202124]/95 border border-white/10 shadow-2xl backdrop-blur-xl pointer-events-auto max-w-[calc(100vw-1.5rem)]">
           {/* User Profile Info */}
-          <div className="flex items-center gap-3 px-4 py-2 hover:bg-white/5 rounded-xl cursor-pointer transition-all border-r border-white/5 mr-1">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold shadow-lg">
+          <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 hover:bg-white/5 rounded-xl cursor-pointer transition-all border-r border-white/5 mr-1">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold shadow-lg flex-shrink-0">
               {mounted ? id.slice(0, 1).toUpperCase() : '?'}
             </div>
-            <div className="flex flex-col">
+            <div className="hidden sm:flex flex-col">
               <span className="text-[11px] font-bold text-white/90 leading-none">Player {mounted ? id.slice(0, 4) : '...'}</span>
               <span className="text-[9px] text-emerald-400 font-medium">Disponível</span>
             </div>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
           </div>
 
-          {/* Interactive Buttons (Mocked) */}
+          {/* Interactive Buttons */}
           <div className="flex items-center gap-1">
             <button 
               onClick={toggleMic}
-              className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all ${isMicOn ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              className={`relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl transition-all ${isMicOn ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
                 {!isMicOn && <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" />}
               </svg>
             </button>
             <ToolbarButton active icon={<><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>} />
-            <ToolbarButton icon={<><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>} />
-            <ToolbarButton icon={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></>} />
             <ToolbarButton icon={<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>} />
           </div>
 
-          {/* Right Side Tools */}
-          <div className="flex items-center gap-1 border-l border-white/5 ml-1 pl-1">
+          {/* Right Side Tools - hidden on mobile */}
+          <div className="hidden sm:flex items-center gap-1 border-l border-white/5 ml-1 pl-1">
+            <ToolbarButton icon={<><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>} />
+            <ToolbarButton icon={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></>} />
             <div className="relative group">
               <ToolbarButton icon={<><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></>} />
               <span className="absolute -top-2 -right-1 bg-blue-600 text-[8px] font-bold px-1 rounded-full border border-[#202124]">NOVO</span>
