@@ -16,7 +16,7 @@ import { supabase } from '@/lib/supabase';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [players, setPlayers] = useState<Record<string, { x: number; y: number; color: string }>>({});
+  const [players, setPlayers] = useState<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string }>>({});
   const [id, setId] = useState('...');
   const [status, setStatus] = useState('Connecting...');
   const [mounted, setMounted] = useState(false);
