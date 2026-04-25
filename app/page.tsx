@@ -67,50 +67,55 @@ export default function Home() {
     if (!mounted || !AGORA_APP_ID) return;
 
     const initAgora = async () => {
-      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
-      AgoraRTC.enableAudioVolumeIndicator(); // Detecção de voz
-      
-      const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-      agoraClient.current = client;
+      console.log("Iniciando Agora com ID:", AGORA_APP_ID);
+      try {
+        const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
+        AgoraRTC.setLogLevel(2); // Avisos e Erros
+        AgoraRTC.enableAudioVolumeIndicator();
+        
+        const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+        agoraClient.current = client;
 
-      client.on('user-published', async (user: any, mediaType: any) => {
-        await client.subscribe(user, mediaType);
-        if (mediaType === 'audio') {
-          const remoteAudioTrack = user.audioTrack;
-          if (remoteAudioTrack) {
-            remoteAudioTrack.play();
-            if (playersRef.current[user.uid as string]) {
-              playersRef.current[user.uid as string].audioTrack = remoteAudioTrack;
+        client.on('user-published', async (user: any, mediaType: any) => {
+          console.log("Usuário remoto publicou áudio:", user.uid);
+          await client.subscribe(user, mediaType);
+          if (mediaType === 'audio') {
+            const remoteAudioTrack = user.audioTrack;
+            if (remoteAudioTrack) {
+              remoteAudioTrack.play();
+              if (playersRef.current[user.uid as string]) {
+                playersRef.current[user.uid as string].audioTrack = remoteAudioTrack;
+              }
             }
           }
-        }
-      });
+        });
 
-      client.on('user-unpublished', (user: any) => {
-        if (playersRef.current[user.uid as string]) {
-          playersRef.current[user.uid as string].audioTrack = null;
-        }
-      });
-
-      // Balãozinho de fala
-      client.on('volume-indicator', (volumes: any[]) => {
-        volumes.forEach((volume: any) => {
-          const isUserSpeaking = volume.level > 10;
-          if (volume.uid === id) {
-            setIsSpeaking(isUserSpeaking);
-          } else if (playersRef.current[volume.uid as string]) {
-            playersRef.current[volume.uid as string].isSpeaking = isUserSpeaking;
+        client.on('user-unpublished', (user: any) => {
+          console.log("Usuário remoto saiu do áudio:", user.uid);
+          if (playersRef.current[user.uid as string]) {
+            playersRef.current[user.uid as string].audioTrack = null;
           }
         });
-      });
 
+        client.on('volume-indicator', (volumes: any[]) => {
+          volumes.forEach((volume: any) => {
+            const isUserSpeaking = volume.level > 10;
+            if (volume.uid === id) {
+              setIsSpeaking(isUserSpeaking);
+            } else if (playersRef.current[volume.uid as string]) {
+              playersRef.current[volume.uid as string].isSpeaking = isUserSpeaking;
+            }
+          });
+        });
 
-      try {
+        console.log("Tentando entrar no canal 'main-room' com UID:", id);
         await client.join(AGORA_APP_ID, 'main-room', null, id);
+        console.log("Conectado à Agora.io com sucesso!");
       } catch (e) {
-        console.error('Agora Join Error', e);
+        console.error('Falha crítica na Agora:', e);
       }
     };
+
 
 
     initAgora();
