@@ -26,14 +26,15 @@ export default function Home() {
   const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string }>>({});
 
   useEffect(() => {
-    // 0. Initialize persistent ID
-    let currentId = localStorage.getItem('mini-gather-id');
+    // 0. Initialize persistent ID (Session-based to allow multi-tab testing)
+    let currentId = sessionStorage.getItem('mini-gather-id');
     if (!currentId) {
       currentId = Math.random().toString(36).slice(2);
-      localStorage.setItem('mini-gather-id', currentId);
+      sessionStorage.setItem('mini-gather-id', currentId);
     }
     setId(currentId);
     setMounted(true);
+
   }, []);
 
   useEffect(() => {
