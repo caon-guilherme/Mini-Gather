@@ -160,7 +160,8 @@ export default function Home() {
       }
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#0a0a0a';
+      ctx.imageSmoothingEnabled = false; // Crunchy pixels
+      ctx.fillStyle = '#1a1c2c'; // Classic dark blue pixel-art background
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Apply Camera Transform
@@ -168,9 +169,9 @@ export default function Home() {
       const offsetY = canvas.height / 2 - camera.current.y * zoom;
       ctx.setTransform(zoom, 0, 0, zoom, offsetX, offsetY);
 
-      // Grid (Infinite-ish)
-      ctx.strokeStyle = '#1a1a1a';
-      ctx.lineWidth = 1;
+      // Pixel Grid (Tiles)
+      ctx.strokeStyle = '#252943';
+      ctx.lineWidth = 2;
       const gridRange = 3000;
       for (let x = -gridRange; x <= gridRange; x += 50) {
         ctx.beginPath(); ctx.moveTo(x, -gridRange); ctx.lineTo(x, gridRange); ctx.stroke();
@@ -180,17 +181,26 @@ export default function Home() {
       }
 
       const drawPlayer = (x: number, y: number, color: string, label: string) => {
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = color;
+        const px = Math.floor(x);
+        const py = Math.floor(y);
+        
+        // Draw blocky character (3x3 pixels)
         ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.roundRect(x - 15, y - 15, 30, 30, 8);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        // Body
+        ctx.fillRect(px - 12, py - 12, 24, 24);
+        // Face/Eyes area
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(px - 8, py - 4, 16, 4);
+        // Eyes
         ctx.fillStyle = 'white';
-        ctx.font = `${12 / zoom}px Inter, sans-serif`;
+        ctx.fillRect(px - 6, py - 4, 2, 2);
+        ctx.fillRect(px + 4, py - 4, 2, 2);
+        
+        // Label with pixel feel
+        ctx.fillStyle = 'white';
+        ctx.font = `bold ${10 / zoom}px "Courier New", monospace`;
         ctx.textAlign = 'center';
-        ctx.fillText(label, x, y - 25);
+        ctx.fillText(label.toUpperCase(), px, py - 22);
       };
 
       drawPlayer(position.current.x, position.current.y, myColor.current, 'You');
@@ -201,6 +211,7 @@ export default function Home() {
         p.y += (p.targetY - p.y) * 0.15;
         drawPlayer(p.x, p.y, p.color, `Player ${pid.slice(0, 4)}`);
       });
+
 
       animationFrameId = requestAnimationFrame(render);
     };
