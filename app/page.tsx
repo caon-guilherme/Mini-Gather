@@ -253,8 +253,8 @@ export default function Home() {
           className="block"
         />
 
-        {/* Floating Controls (Top Right) */}
-        <div className="absolute top-6 right-6 flex flex-col gap-2 pointer-events-auto">
+        {/* Floating Controls (Bottom Right) */}
+        <div className="absolute bottom-24 right-6 flex flex-col gap-2 pointer-events-auto">
           <button onClick={centerMap} className="p-3 bg-[#202124] hover:bg-[#3c4043] rounded-xl border border-white/10 shadow-2xl transition-all">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>
           </button>
