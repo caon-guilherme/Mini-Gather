@@ -1,8 +1,5 @@
 'use client';
-// Build Trigger #3 - Git Email Fix - 22:57
-
-
-
+// Build Trigger #4 - Full Stability Fix - 23:00
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -10,20 +7,23 @@ import { supabase } from '@/lib/supabase';
 /**
  * Mini Gather - Multiplayer Basic Demo
  * Features:
- * - Real-time movement via Supabase Broadcast
- * - Canvas rendering with smooth UI
- * - Responsive game world
+ * - Fluid 60FPS movement
+ * - Network interpolation
+ * - Persistent ID
  */
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [players, setPlayers] = useState<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string }>>({});
+  const [playerCount, setPlayerCount] = useState(0);
   const [id, setId] = useState('...');
   const [status, setStatus] = useState('Connecting...');
   const [mounted, setMounted] = useState(false);
   
   const position = useRef({ x: 250, y: 250 });
   const myColor = useRef(`hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`);
+  const keysPressed = useRef<Record<string, boolean>>({});
+  const lastBroadcast = useRef(0);
+  const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string }>>({});
 
   useEffect(() => {
     // 0. Initialize persistent ID
@@ -35,11 +35,6 @@ export default function Home() {
     setId(currentId);
     setMounted(true);
   }, []);
-
-
-
-  const playersRef = useRef<Record<string, { x: number; y: number; targetX: number; targetY: number; color: string }>>({});
-  const [playerCount, setPlayerCount] = useState(0);
 
   useEffect(() => {
     if (!mounted || id === '...') return;
@@ -58,7 +53,7 @@ export default function Home() {
         setPlayerCount(presentIds.length);
         
         presentIds.forEach(pid => {
-          if (pid === id) return; // Skip self, we handle local separately
+          if (pid === id) return;
           const presences = state[pid] as any[];
           if (presences && presences[0]) {
             const p = presences[0];
@@ -68,7 +63,6 @@ export default function Home() {
           }
         });
 
-        // Cleanup left players
         Object.keys(playersRef.current).forEach(pid => {
           if (pid !== id && !presentIds.includes(pid)) delete playersRef.current[pid];
         });
@@ -143,7 +137,7 @@ export default function Home() {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       }
 
-      // Draw Me
+      // Render Me
       const drawPlayer = (x: number, y: number, color: string, label: string) => {
         ctx.shadowBlur = 15;
         ctx.shadowColor = color;
@@ -160,7 +154,7 @@ export default function Home() {
 
       drawPlayer(position.current.x, position.current.y, myColor.current, 'You');
 
-      // Draw Others with interpolation
+      // Render Others
       Object.entries(playersRef.current).forEach(([pid, p]) => {
         if (pid === id) return;
         p.x += (p.targetX - p.x) * 0.15;
@@ -175,8 +169,6 @@ export default function Home() {
     return () => cancelAnimationFrame(animationFrameId);
   }, [id]);
 
-
-
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-4 font-sans text-white">
       <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl shadow-blue-500/10">
@@ -190,7 +182,6 @@ export default function Home() {
             <span className="h-3 w-[1px] bg-slate-800" />
             <span>Players: {playerCount}</span>
           </div>
-
         </div>
 
         <canvas 
@@ -221,7 +212,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-
       
       <p className="mt-8 text-sm text-slate-500 animate-fade-in">
         Open this in another tab to see multiplayer in action.
