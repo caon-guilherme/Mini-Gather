@@ -227,6 +227,14 @@ export default function Home() {
   const handleMouseUp = () => { isDragging.current = false; };
   const centerMap = () => { isFollowing.current = true; };
 
+  const handleWheel = (e: React.WheelEvent) => {
+    setZoom(prev => {
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      const next = Math.max(0.5, Math.min(prev + delta, 3));
+      return next;
+    });
+  };
+
   return (
     <main className="fixed inset-0 flex flex-col items-center justify-center bg-[#070707] font-sans text-white overflow-hidden select-none">
       {/* Game Canvas Container */}
@@ -234,7 +242,9 @@ export default function Home() {
            onMouseDown={handleMouseDown}
            onMouseMove={handleMouseMove}
            onMouseUp={handleMouseUp}
-           onMouseLeave={handleMouseUp}>
+           onMouseLeave={handleMouseUp}
+           onWheel={handleWheel}>
+
         
         <canvas 
           ref={canvasRef} 
