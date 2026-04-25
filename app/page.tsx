@@ -73,12 +73,11 @@ export default function Home() {
         const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
         console.log("Agora SDK importado.");
         AgoraRTC.setLogLevel(2); // Avisos e Erros
-        AgoraRTC.enableAudioVolumeIndicator();
-        console.log("Volume indicator ativado.");
         
         const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
         agoraClient.current = client;
-        console.log("Cliente criado.");
+        client.enableAudioVolumeIndicator(); // chamado na instância, não na classe
+        console.log("Cliente criado e volume indicator ativado.");
 
         client.on('user-published', async (user: any, mediaType: any) => {
           console.log("Usuário remoto publicou áudio:", user.uid);
@@ -163,7 +162,7 @@ export default function Home() {
           });
         });
 
-        AgoraRTC.enableAudioVolumeIndicator();
+        client.enableAudioVolumeIndicator(); // chamado na instância, não na classe
         const currentId = sessionStorage.getItem('mini-gather-id') || id;
         await client.join(AGORA_APP_ID, 'main-room', null, currentId);
         console.log("Agora conectado via clique do mic!");
