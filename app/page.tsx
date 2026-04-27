@@ -1,5 +1,5 @@
 'use client';
-// Build Trigger #4 - Full Stability Fix - 23:00
+// Build Trigger #5 - Proximity Pre-Connect
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -25,6 +25,10 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [isMicOn, setIsMicOn] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [nearbyPlayer, setNearbyPlayer] = useState<string | null>(null); // pid of player we're touching
+  const nearbyPlayerRef = useRef<string | null>(null); // mirror for use inside rAF
+  const isPreConnected = useRef(false); // true when Agora joined via proximity
+  const audioCtxRef = useRef<AudioContext | null>(null);
   
   const position = useRef({ x: 250, y: 250 });
   const myColor = useRef(`hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`);
@@ -128,6 +132,71 @@ export default function Home() {
       }
     };
   }, [id, mounted]);
+
+  // --- Proximity helpers ---
+
+  /** Play a short soft ping using Web Audio API */
+  const playProximityPing = () => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      const ctx = audioCtxRef.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (_) {}
+  };
+
+  /** Join Agora with mic muted (pre-connect) */
+  const preConnectAgora = async () => {
+    if (isPreConnected.current || !AGORA_APP_ID) return;
+    try {
+      // If client not yet initialised, create a lightweight one
+      if (!agoraClient.current) {
+        const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
+        AgoraRTC.setLogLevel(4);
+        const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+        agoraClient.current = client;
+
+        client.on('user-published', async (user: any, mediaType: any) => {
+          await client.subscribe(user, mediaType);
+          if (mediaType === 'audio') {
+            user.audioTrack?.play();
+            if (playersRef.current[user.uid]) {
+              playersRef.current[user.uid].audioTrack = user.audioTrack;
+            }
+          }
+        });
+        client.on('user-unpublished', (user: any) => {
+          if (playersRef.current[user.uid]) playersRef.current[user.uid].audioTrack = null;
+        });
+        client.on('volume-indicator', (volumes: any[]) => {
+          volumes.forEach((v: any) => {
+            const speaking = v.level > 10;
+            if (v.uid === id) setIsSpeaking(speaking);
+            else if (playersRef.current[v.uid]) playersRef.current[v.uid].isSpeaking = speaking;
+          });
+        });
+        client.enableAudioVolumeIndicator();
+        const currentId = sessionStorage.getItem('mini-gather-id') || id;
+        await client.join(AGORA_APP_ID, 'main-room', null, currentId);
+      }
+      // mic stays MUTED — we only join the channel so audio is ready
+      isPreConnected.current = true;
+      console.log('[Proximity] Agora pre-connected (mic muted).');
+    } catch (e) {
+      console.warn('[Proximity] Pre-connect failed:', e);
+    }
+  };
 
   // Mic Toggle
   const toggleMic = async () => {
@@ -380,14 +449,44 @@ export default function Home() {
 
       drawPlayer(position.current.x, position.current.y, myColor.current, 'You', isSpeaking);
 
+      // --- Proximity detection ---
+      const TOUCH_RADIUS = 30;   // px — "encostou"
+      const LEAVE_RADIUS = 80;   // px — hysteresis so it doesn't flicker
+      let closestPid: string | null = null;
+      let closestDist = Infinity;
+
       Object.entries(playersRef.current).forEach(([pid, p]) => {
         if (pid === id) return;
         p.x += (p.targetX - p.x) * 0.15;
         p.y += (p.targetY - p.y) * 0.15;
+
+        const dx = position.current.x - p.x;
+        const dy = position.current.y - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestPid = pid;
+        }
+
         drawPlayer(p.x, p.y, p.color, `Player ${pid.slice(0, 4)}`, p.isSpeaking);
       });
 
-
+      // Trigger on touch
+      const wasNearby = nearbyPlayerRef.current;
+      if (closestDist < TOUCH_RADIUS && closestPid !== null) {
+        if (!wasNearby) {
+          // New touch event
+          nearbyPlayerRef.current = closestPid;
+          setNearbyPlayer(closestPid);
+          playProximityPing();
+          preConnectAgora();
+        }
+      } else if (wasNearby && closestDist > LEAVE_RADIUS) {
+        // Player walked away
+        nearbyPlayerRef.current = null;
+        setNearbyPlayer(null);
+      }
 
       animationFrameId = requestAnimationFrame(render);
     };
@@ -562,6 +661,19 @@ export default function Home() {
               <span className="w-1 h-1 rounded-full bg-white/20" />
               <span>REV: {process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'LOCAL-DEV'}</span>
             </div>
+          </div>
+        </div>
+
+        {/* Proximity Toast */}
+        <div
+          className="absolute top-6 left-1/2 -translate-x-1/2 pointer-events-none transition-all duration-300"
+          style={{ opacity: nearbyPlayer ? 1 : 0, transform: `translateX(-50%) translateY(${nearbyPlayer ? '0' : '-12px'})` }}
+        >
+          <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-600/80 backdrop-blur-md border border-indigo-400/30 shadow-2xl">
+            <span className="w-2 h-2 rounded-full bg-indigo-300 animate-pulse" />
+            <span className="text-[11px] font-semibold text-white/90 whitespace-nowrap">
+              Player {nearbyPlayer?.slice(0, 4).toUpperCase()} próximo — áudio pré-conectado 🔇
+            </span>
           </div>
         </div>
       </div>
