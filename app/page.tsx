@@ -25,6 +25,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [isMicOn, setIsMicOn] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const isSpeakingRef = useRef(false); // mirror for rAF (avoids stale closure)
   const [nearbyPlayer, setNearbyPlayer] = useState<string | null>(null); // pid of player we're touching
   const nearbyPlayerRef = useRef<string | null>(null); // mirror for use inside rAF
   const isPreConnected = useRef(false); // true when Agora joined via proximity
@@ -108,6 +109,7 @@ export default function Home() {
           volumes.forEach((volume: any) => {
             const isUserSpeaking = volume.level > 10;
             if (volume.uid === id) {
+              isSpeakingRef.current = isUserSpeaking;
               setIsSpeaking(isUserSpeaking);
             } else if (playersRef.current[volume.uid as string]) {
               playersRef.current[volume.uid as string].isSpeaking = isUserSpeaking;
@@ -182,7 +184,7 @@ export default function Home() {
         client.on('volume-indicator', (volumes: any[]) => {
           volumes.forEach((v: any) => {
             const speaking = v.level > 10;
-            if (v.uid === id) setIsSpeaking(speaking);
+            if (v.uid === id) { isSpeakingRef.current = speaking; setIsSpeaking(speaking); }
             else if (playersRef.current[v.uid]) playersRef.current[v.uid].isSpeaking = speaking;
           });
         });
@@ -226,7 +228,7 @@ export default function Home() {
         client.on('volume-indicator', (volumes: any[]) => {
           volumes.forEach((v: any) => {
             const speaking = v.level > 10;
-            if (v.uid === id) setIsSpeaking(speaking);
+            if (v.uid === id) { isSpeakingRef.current = speaking; setIsSpeaking(speaking); }
             else if (playersRef.current[v.uid]) playersRef.current[v.uid].isSpeaking = speaking;
           });
         });
@@ -253,6 +255,7 @@ export default function Home() {
         }
       }
       setIsMicOn(false);
+      isSpeakingRef.current = false;
       setIsSpeaking(false);
     } else {
       const AgoraRTC = (await import('agora-rtc-sdk-ng')).default as any;
@@ -447,7 +450,7 @@ export default function Home() {
         ctx.fillText(label.toUpperCase(), px, py - 22);
       };
 
-      drawPlayer(position.current.x, position.current.y, myColor.current, 'You', isSpeaking);
+      drawPlayer(position.current.x, position.current.y, myColor.current, 'You', isSpeakingRef.current);
 
       // --- Proximity detection ---
       const TOUCH_RADIUS = 30;   // px — "encostou"
